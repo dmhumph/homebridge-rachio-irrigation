@@ -171,7 +171,8 @@ class irrigation {
 		valve.addCharacteristic(Characteristic.ConfiguredName)
 		valve.getCharacteristic(Characteristic.SetDuration).setProps({
 			minValue: 0,
-			maxValue: 64800
+			maxValue: 64800,
+			minStep: 60
 		})
 		valve.getCharacteristic(Characteristic.RemainingDuration).setProps({
 			minValue: 0,
@@ -206,7 +207,7 @@ class irrigation {
 		)
 		// Configure Valve Service
 		valveService.getCharacteristic(Characteristic.Active).on('get', this.getValveValue.bind(this, valveService, 'ValveActive')).on('set', this.setValveValue.bind(this, device, valveService))
-		valveService.getCharacteristic(Characteristic.InUse).on('get', this.getValveValue.bind(this, valveService, 'ValveInUse')).on('set', this.setValveValue.bind(this, device, valveService))
+		valveService.getCharacteristic(Characteristic.InUse).on('get', this.getValveValue.bind(this, valveService, 'ValveInUse'))
 		valveService.getCharacteristic(Characteristic.SetDuration).on('get', this.getValveValue.bind(this, valveService, 'ValveSetDuration')).on('set', this.setValveDuration.bind(this, device, valveService))
 		valveService.getCharacteristic(Characteristic.RemainingDuration).on('get', this.getValveValue.bind(this, valveService, 'ValveRemainingDuration'))
 	}
@@ -245,7 +246,8 @@ class irrigation {
 	}
 
 	async setValveValue(device, valveService, value, callback) {
-		//this.log.debug('%s - Set Active state to %s', valveService.getCharacteristic(Characteristic.Name).value, value)
+		// Entry log for HomeKit toggle
+		this.log.info('HomeKit toggle received for zone-%s %s -> %s', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, value === Characteristic.Active.ACTIVE ? 'ACTIVE' : 'INACTIVE')
 		if (value == valveService.getCharacteristic(Characteristic.Active).value) {
 			//IOS 17 bug fix for duplicate calls
 			this.log.debug('supressed duplicate call from IOS for %s, current value %s, new value %s', valveService.getCharacteristic(Characteristic.Name).value, value, valveService.getCharacteristic(Characteristic.Active).value)
@@ -260,7 +262,13 @@ class irrigation {
 		switch (value) {
 			case Characteristic.Active.ACTIVE:
 				this.log.info('Starting zone-%s %s for %s mins', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, runTime / 60)
-				response = await this.rachioapi.startZone(this.platform.token, valveService.getCharacteristic(Characteristic.SerialNumber).value, runTime)
+				try {
+					response = await this.rachioapi.startZone(this.platform.token, valveService.getCharacteristic(Characteristic.SerialNumber).value, runTime)
+				} catch (err) {
+					this.log.error('Failed to start zone-%s %s: %s', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, err.message || err)
+					callback(err)
+					return
+				}
 				if (response.status == 204) {
 					let myZoneStart = {
 						eventId: 'f2d29dab-811c-34d4-8979-b464f38380a3',
@@ -307,13 +315,19 @@ class irrigation {
 						this.platform.listener.eventMsg(irrigationSystemService, valveService, myZoneStop)
 					}, runTime * 1000)
 				} else {
-					this.log.info('Failed to start valve')
+					this.log.warn('Unexpected response starting zone-%s %s: status %s', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, response.status)
 				}
 				break
 			case Characteristic.Active.INACTIVE:
 				// Turn off/stopping the valve
 				this.log.info('Stopping zone-%s %s', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value)
-				response = await this.rachioapi.stopDevice(this.platform.token, device.id)
+				try {
+					response = await this.rachioapi.stopDevice(this.platform.token, device.id)
+				} catch (err) {
+					this.log.error('Failed to stop zone-%s %s: %s', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, err.message || err)
+					callback(err)
+					return
+				}
 				if (response.status == 204) {
 					let myZoneStop = {
 						eventId: 'c55fe382-9aad-310d-beb4-652542deea89',
@@ -337,7 +351,7 @@ class irrigation {
 					}
 					this.platform.listener.eventMsg(irrigationSystemService, valveService, myZoneStop)
 					clearTimeout(this.platform.localWebhook)
-				} else this.log.info('Failed to stop zone')
+				} else this.log.warn('Unexpected response stopping zone-%s %s: status %s', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, response.status)
 				break
 		}
 		callback()
@@ -346,7 +360,7 @@ class irrigation {
 	setValveDuration(device, valveService, value, callback) {
 		// Set default duration from Homekit value
 		valveService.getCharacteristic(Characteristic.SetDuration).updateValue(value)
-		this.log.info('Set %s duration for %s mins', valveService.getCharacteristic(Characteristic.Name).value, value / 60)
+		this.log.info('HomeKit set duration for zone-%s %s to %s mins', valveService.getCharacteristic(Characteristic.ServiceLabelIndex).value, valveService.getCharacteristic(Characteristic.Name).value, value / 60)
 		callback()
 	}
 }

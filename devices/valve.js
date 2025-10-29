@@ -90,11 +90,21 @@ class valve {
 			.setCharacteristic(Characteristic.ValveType, this.platform.valveType)
 			.setCharacteristic(Characteristic.IsConfigured, Characteristic.IsConfigured.CONFIGURED)
 			.setCharacteristic(Characteristic.ServiceLabelIndex, valve.zone)
-			.setCharacteristic(Characteristic.StatusFault, !valve.state.reportedState.connected)
+			.setCharacteristic(Characteristic.StatusFault, valve.state.reportedState.connected ? Characteristic.StatusFault.NO_FAULT : Characteristic.StatusFault.GENERAL_FAULT)
 			.setCharacteristic(Characteristic.SerialNumber, valve.id)
 			.setCharacteristic(Characteristic.Name, valve.name)
 			.setCharacteristic(Characteristic.ConfiguredName, valve.name)
 			.setCharacteristic(Characteristic.Model, 'SHV101')
+		// Ensure duration characteristics have sensible props for Home slider
+		valveService.getCharacteristic(Characteristic.SetDuration).setProps({
+			minValue: 0,
+			maxValue: 64800,
+			minStep: 60
+		})
+		valveService.getCharacteristic(Characteristic.RemainingDuration).setProps({
+			minValue: 0,
+			maxValue: 64800
+		})
 		if (valve.state.reportedState.lastWateringAction) {
 			let start = valve.state.reportedState.lastWateringAction.start
 			let duration = valve.state.reportedState.lastWateringAction.durationSeconds
@@ -138,7 +148,6 @@ class valve {
 			.on('set', this.setValveValue.bind(this, device, valveService))
 		valveService.getCharacteristic(Characteristic.InUse)
 			.on('get', this.getValveValue.bind(this, valveService, 'ValveInUse'))
-			.on('set', this.setValveValue.bind(this, device, valveService))
 		valveService.getCharacteristic(Characteristic.SetDuration)
 			.on('get', this.getValveValue.bind(this, valveService, 'ValveSetDuration'))
 			.on('set', this.setValveSetDuration.bind(this, device, valveService))
@@ -185,7 +194,8 @@ class valve {
 	}
 
 	async setValveValue(device, valveService, value, callback) {
-		//this.log.debug('%s - Set Active state to %s', valveService.getCharacteristic(Characteristic.Name).value, value)
+		// Entry log for HomeKit toggle
+		this.log.info('HomeKit toggle received for valve %s -> %s', valveService.getCharacteristic(Characteristic.Name).value, value === Characteristic.Active.ACTIVE ? 'ACTIVE' : 'INACTIVE')
 		if (value == valveService.getCharacteristic(Characteristic.Active).value) {
 			//IOS 17 bug fix for duplicate calls
 			this.log.debug('supressed duplicate call from IOS for %s, current value %s, new value %s', valveService.getCharacteristic(Characteristic.Name).value, value, valveService.getCharacteristic(Characteristic.Active).value)
@@ -200,7 +210,13 @@ class valve {
 			case Characteristic.Active.ACTIVE:
 				// Turn on/idle the valve
 				this.log.info('Starting %s valve for %s mins', valveService.getCharacteristic(Characteristic.Name).value, runTime / 60)
-				response = await this.rachioapi.startWatering(this.platform.token, device.id, runTime)
+				try {
+					response = await this.rachioapi.startWatering(this.platform.token, device.id, runTime)
+				} catch (err) {
+					this.log.error('Failed to start valve %s: %s', valveService.getCharacteristic(Characteristic.Name).value, err.message || err)
+					callback(err)
+					return
+				}
 				if (response.status == 200) {
 					//json start stuff
 					let myJsonStart = {
@@ -250,7 +266,13 @@ class valve {
 			case Characteristic.Active.INACTIVE:
 				// Turn off/stopping the valve
 				this.log.info('Stopping Zone', valveService.getCharacteristic(Characteristic.Name).value)
-				response = await this.rachioapi.stopWatering(this.platform.token, device.id)
+				try {
+					response = await this.rachioapi.stopWatering(this.platform.token, device.id)
+				} catch (err) {
+					this.log.error('Failed to stop valve %s: %s', valveService.getCharacteristic(Characteristic.Name).value, err.message || err)
+					callback(err)
+					return
+				}
 				if (response.status == 200) {
 					//json stop stuff
 					let myJsonStop = {
@@ -274,7 +296,7 @@ class valve {
 					}
 					this.platform.listener.eventMsg(null, valveService, myJsonStop)
 					clearTimeout(this.localWebhook)
-				} else this.log.info('Failed to stop valve')
+				} else this.log.warn('Unexpected response stopping valve %s: status %s', valveService.getCharacteristic(Characteristic.Name).value, response.status)
 				break
 		}
 		callback()
@@ -283,7 +305,7 @@ class valve {
 	setValveSetDuration(device, valveService, value, callback) {
 		// Set default duration from Homekit value
 		valveService.getCharacteristic(Characteristic.SetDuration).updateValue(value)
-		this.log.info('Set %s duration for %s mins', valveService.getCharacteristic(Characteristic.Name).value, value / 60)
+		this.log.info('HomeKit set duration for valve %s to %s mins', valveService.getCharacteristic(Characteristic.Name).value, value / 60)
 		callback()
 	}
 }
