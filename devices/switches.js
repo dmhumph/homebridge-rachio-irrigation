@@ -42,7 +42,7 @@ class switches {
 	}
 
 	async setSwitchValue(device, switchService, value, callback) {
-		this.log.debug('toggle switch state %s', switchService.getCharacteristic(Characteristic.Name).value)
+		this.log.info('HomeKit toggle received for switch %s -> %s', switchService.getCharacteristic(Characteristic.Name).value, value ? 'ON' : 'OFF')
 		let response
 		switch (switchService.getCharacteristic(Characteristic.Name).value) {
 			case device.name + ' Standby':
@@ -50,12 +50,24 @@ class switches {
 					callback('error')
 				} else {
 					if (value == false) {
-						response = await this.rachioapi.deviceStandby(this.platform.token, device, 'on')
+						try {
+							response = await this.rachioapi.deviceStandby(this.platform.token, device, 'on')
+						} catch (err) {
+							this.log.error('Failed to disable standby for %s: %s', device.name, err.message || err)
+							callback(err)
+							return
+						}
 						if (response.status == 204) {
 							switchService.getCharacteristic(Characteristic.On).updateValue(value)
 						}
 					} else if (value == true) {
-						response = await this.rachioapi.deviceStandby(this.platform.token, device, 'off')
+						try {
+							response = await this.rachioapi.deviceStandby(this.platform.token, device, 'off')
+						} catch (err) {
+							this.log.error('Failed to enable standby for %s: %s', device.name, err.message || err)
+							callback(err)
+							return
+						}
 						if (response.status == 204) {
 							switchService.getCharacteristic(Characteristic.On).updateValue(value)
 						}
@@ -79,12 +91,24 @@ class switches {
 							this.log.info('Quick Run All finished, completed after %s minutes', completeRun/60)
 						}, completeRun*1000);
 
-						response = await this.rachioapi.startMultipleZone(this.platform.token, device.zones, this.platform.defaultRuntime)
+						try {
+							response = await this.rachioapi.startMultipleZone(this.platform.token, device.zones, this.platform.defaultRuntime)
+						} catch (err) {
+							this.log.error('Failed to start Quick Run All on %s: %s', device.name, err.message || err)
+							callback(err)
+							return
+						}
 						if (response.status == 204) {
 							switchService.getCharacteristic(Characteristic.On).updateValue(value)
 						}
 					} else {
-						response = await this.rachioapi.stopDevice(this.platform.token, device.id)
+						try {
+							response = await this.rachioapi.stopDevice(this.platform.token, device.id)
+						} catch (err) {
+							this.log.error('Failed to stop Quick Run All on %s: %s', device.name, err.message || err)
+							callback(err)
+							return
+						}
 						if (response.status == 204) {
 							switchService.getCharacteristic(Characteristic.On).updateValue(value)
 						}
@@ -97,12 +121,24 @@ class switches {
 					callback('error')
 				} else {
 					if (value) {
-						response = await this.rachioapi.startSchedule(this.platform.token, switchService.getCharacteristic(Characteristic.SerialNumber).value)
+						try {
+							response = await this.rachioapi.startSchedule(this.platform.token, switchService.getCharacteristic(Characteristic.SerialNumber).value)
+						} catch (err) {
+							this.log.error('Failed to start schedule %s: %s', switchService.getCharacteristic(Characteristic.Name).value, err.message || err)
+							callback(err)
+							return
+						}
 						if (response.status == 204) {
 							switchService.getCharacteristic(Characteristic.On).updateValue(true)
 						}
 					} else {
-						response = await this.rachioapi.stopDevice(this.platform.token, device.id)
+						try {
+							response = await this.rachioapi.stopDevice(this.platform.token, device.id)
+						} catch (err) {
+							this.log.error('Failed to stop schedule on %s: %s', device.name, err.message || err)
+							callback(err)
+							return
+						}
 						if (response.status == 204) {
 							switchService.getCharacteristic(Characteristic.On).updateValue(false)
 						}
