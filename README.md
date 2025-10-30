@@ -4,7 +4,7 @@
 
 # homebridge-rachio-irrigation
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
-<br>Rachio Irrigation System platform plugin for [Homebridge](https://github.com/nfarina/homebridge).
+<br>Rachio Irrigation System platform plugin for [Homebridge](https://github.com/dmhumph/homebridge-rachio-irrigation.git).
 <br>Supporting
 - Rachio 1 Contollers
 - Rachio 2 Contollers
