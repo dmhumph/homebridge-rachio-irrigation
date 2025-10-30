@@ -1,6 +1,6 @@
 {
 	"name": "homebridge-rachio-irrigation",
-	"displayName": "Rachio",
+	"displayName": "Rachio-dmhumph",
 	"version": "1.4.6",
 	"description": "Rachio Irrigation System platform plugin for [Homebridge](https://github.com/dmhumph/homebridge-rachio-irrigation.git).",
 	"main": "index.js",
